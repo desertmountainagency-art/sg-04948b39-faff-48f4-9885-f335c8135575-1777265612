@@ -1,6 +1,6 @@
 ---
 title: Scanning Progress - Live Terminal
-status: todo
+status: done
 priority: high
 type: feature
 tags: [progress, terminal]

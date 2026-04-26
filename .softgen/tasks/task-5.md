@@ -1,6 +1,6 @@
 ---
 title: Finding Details - Vulnerability Explorer
-status: todo
+status: done
 priority: medium
 type: feature
 tags: [findings, remediation]
