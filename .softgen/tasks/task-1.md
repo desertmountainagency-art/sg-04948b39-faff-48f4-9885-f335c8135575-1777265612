@@ -1,6 +1,6 @@
 ---
 title: Design System & Layout Foundation
-status: in_progress
+status: done
 priority: urgent
 type: feature
 tags: [design, foundation]
@@ -13,12 +13,12 @@ position: 1
 Set up the core design system with dark theme colors, typography (Inter + JetBrains Mono), and mobile-responsive layout shell. Includes bottom navigation component.
 
 ## Checklist
-- [ ] Import Inter and JetBrains Mono fonts from Google Fonts
-- [ ] Configure CSS variables in globals.css for all dark theme colors
-- [ ] Sync color tokens to tailwind.config.ts
-- [ ] Create BottomNav component with 3 tabs: Scan, Reports, Settings
-- [ ] Update index.tsx with proper dark theme and mobile meta tags
-- [ ] Add mobile viewport configuration and safe area handling
+- [x] Import Inter and JetBrains Mono fonts from Google Fonts
+- [x] Configure CSS variables in globals.css for all dark theme colors
+- [x] Sync color tokens to tailwind.config.ts
+- [x] Create BottomNav component with 3 tabs: Scan, Reports, Settings
+- [x] Update index.tsx with proper dark theme and mobile meta tags
+- [x] Add mobile viewport configuration and safe area handling
 
 ## Acceptance
 - Dark theme displays correctly with neon cyan accents
