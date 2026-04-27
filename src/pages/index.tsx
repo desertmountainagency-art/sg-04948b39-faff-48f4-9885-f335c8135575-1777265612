@@ -2,7 +2,7 @@ import { SEO } from "@/components/SEO";
 import { LandingHeader } from "@/components/LandingHeader";
 import { LandingFooter } from "@/components/LandingFooter";
 import Link from "next/link";
-import { Shield, Code, Users, CheckCircle2, Zap, Eye, ArrowRight, Github, Award, Clock } from "lucide-react";
+import { Shield, Code, Users, CheckCircle2, Zap, Eye, ArrowRight, Github, Award, Clock, AlertTriangle, Terminal, Lock } from "lucide-react";
 import { useState } from "react";
 
 export default function Landing() {
