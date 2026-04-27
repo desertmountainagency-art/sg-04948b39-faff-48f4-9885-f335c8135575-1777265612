@@ -15,6 +15,17 @@ export default function Home() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>("home");
   const [scanUrl, setScanUrl] = useState("");
 
+  const handleTabChange = (tab: "scan" | "reports" | "settings") => {
+    setActiveTab(tab);
+    // Reset screen state based on tab
+    if (tab === "scan") {
+      setCurrentScreen("home");
+    } else if (tab === "reports") {
+      setCurrentScreen("report");
+    }
+    // Settings tab doesn't need screen state
+  };
+
   const handleStartScan = () => {
     if (!scanUrl.trim()) return;
     setCurrentScreen("scanning");
@@ -145,7 +156,7 @@ export default function Home() {
           {renderScreen()}
         </main>
 
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
     </>
   );
