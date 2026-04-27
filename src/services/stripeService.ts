@@ -71,7 +71,7 @@ export const stripeService = {
       return null;
     }
 
-    return data;
+    return data as StripeCustomer;
   },
 
   async createCustomer(userId: string, email: string, stripeCustomerId: string, name?: string): Promise<StripeCustomer | null> {
@@ -91,7 +91,7 @@ export const stripeService = {
       return null;
     }
 
-    return data;
+    return data as StripeCustomer;
   },
 
   // Subscription operations
@@ -111,7 +111,7 @@ export const stripeService = {
       return null;
     }
 
-    return data;
+    return data as unknown as StripeSubscription;
   },
 
   async getAllSubscriptions(userId: string): Promise<StripeSubscription[]> {
@@ -129,7 +129,7 @@ export const stripeService = {
       return [];
     }
 
-    return data || [];
+    return (data || []) as unknown as StripeSubscription[];
   },
 
   // Payment operations
@@ -148,7 +148,7 @@ export const stripeService = {
       return [];
     }
 
-    return data || [];
+    return (data || []) as unknown as StripePayment[];
   },
 
   // Invoice operations
@@ -167,7 +167,7 @@ export const stripeService = {
       return [];
     }
 
-    return data || [];
+    return (data || []) as unknown as StripeInvoice[];
   },
 
   // Refund operations
@@ -175,18 +175,22 @@ export const stripeService = {
     const customer = await this.getCustomer(userId);
     if (!customer) return [];
 
+    const { data: payments } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("customer_id", customer.id);
+
+    if (!payments || payments.length === 0) return [];
+
+    const paymentIds = payments.map((p) => p.id);
+
     const { data, error } = await supabase
       .from("refunds")
       .select(`
         *,
         payment:payments(*)
       `)
-      .in("payment_id", 
-        supabase
-          .from("payments")
-          .select("id")
-          .eq("customer_id", customer.id)
-      )
+      .in("payment_id", paymentIds)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -194,6 +198,6 @@ export const stripeService = {
       return [];
     }
 
-    return data || [];
-  },
+    return (data || []) as unknown as StripeRefund[];
+  }
 };
