@@ -1,4 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+  apiVersion: "2024-11-20.acacia",
+});
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,42 +16,57 @@ export default async function handler(
   try {
     const { plan, userId, email } = req.body;
 
-    if (!plan || !userId || !email) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Validate Stripe is configured
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error("Stripe not configured - missing STRIPE_SECRET_KEY");
+      return res.status(500).json({ error: "Payment system not configured. Please add Stripe API keys to .env.local" });
     }
 
-    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-    if (!STRIPE_SECRET_KEY) {
-      return res.status(500).json({ error: "Stripe not configured" });
+    // Validate required fields
+    if (!plan) {
+      return res.status(400).json({ error: "Missing plan" });
     }
 
     // Price mapping
-    const priceMap: Record<string, { priceId: string; amount: number }> = {
-      pro: {
-        priceId: process.env.STRIPE_PRO_PRICE_ID || "price_pro_monthly",
-        amount: 4900, // $49.00
-      },
-      enterprise: {
-        priceId: process.env.STRIPE_ENTERPRISE_PRICE_ID || "price_enterprise_monthly",
-        amount: 0, // Contact sales
-      },
+    const priceMap: Record<string, string> = {
+      pro: process.env.STRIPE_PRO_PRICE_ID || "",
+      enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID || "",
     };
 
-    const selectedPlan = priceMap[plan];
-    if (!selectedPlan) {
-      return res.status(400).json({ error: "Invalid plan" });
+    const priceId = priceMap[plan];
+    if (!priceId) {
+      return res.status(400).json({ error: "Invalid plan or price not configured" });
     }
 
-    // In production, use actual Stripe SDK
-    // For now, return mock checkout URL
-    const checkoutUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/app?checkout=success&plan=${plan}`;
+    // Create Stripe checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: "subscription",
+      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/app?checkout=success`,
+      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/?checkout=canceled`,
+      client_reference_id: userId,
+      customer_email: email,
+      metadata: {
+        plan,
+        userId: userId || "anonymous",
+      },
+    });
 
     return res.status(200).json({
-      url: checkoutUrl,
-      sessionId: `cs_mock_${Date.now()}`,
+      url: session.url,
+      sessionId: session.id,
     });
   } catch (error) {
     console.error("Checkout session error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    if (error instanceof Stripe.errors.StripeError) {
+      return res.status(400).json({ error: error.message });
+    }
+    return res.status(500).json({ error: "Failed to create checkout session" });
   }
 }
