@@ -2,9 +2,46 @@ import { SEO } from "@/components/SEO";
 import { LandingHeader } from "@/components/LandingHeader";
 import { LandingFooter } from "@/components/LandingFooter";
 import Link from "next/link";
-import { Shield, Zap, Code, Search, CheckCircle2, AlertTriangle, ArrowRight, Github, Terminal, Lock } from "lucide-react";
+import { Shield, Code, Users, CheckCircle2, Zap, Eye, ArrowRight, Github, Award, Clock } from "lucide-react";
+import { useState } from "react";
 
-export default function Home() {
+export default function Landing() {
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  const handleSelectPlan = async (plan: "starter" | "pro" | "enterprise") => {
+    if (plan === "enterprise") {
+      window.location.href = "mailto:sales@vibecheck.dev";
+      return;
+    }
+
+    if (plan === "starter") {
+      window.location.href = "/app";
+      return;
+    }
+
+    setLoadingPlan(plan);
+
+    try {
+      const response = await fetch("/api/stripe/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error("No checkout URL returned");
+        setLoadingPlan(null);
+      }
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      setLoadingPlan(null);
+    }
+  };
+
   return (
     <>
       <SEO
@@ -301,120 +338,149 @@ db.query(query, [userId]);`}
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="py-20 bg-surface-1">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="text-center mb-16 space-y-3">
-            <p className="text-[10px] font-bold tracking-widest text-accent-cyan uppercase">
-              Transparent Pricing
+      {/* Pricing Section */}
+      <section className="py-20">
+        <div className="container max-w-6xl">
+          <div className="text-center mb-16">
+            <p className="text-[10px] font-bold tracking-widest text-accent-cyan uppercase mb-3">
+              Pricing
             </p>
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Pay for <span className="text-accent-cyan">scans</span>, not seats
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Choose Your Plan
             </h2>
+            <p className="text-text-muted max-w-2xl mx-auto">
+              Start free, scale as you grow
+            </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {/* Free Tier */}
-            <div className="bg-background border border-border rounded-lg p-8 space-y-6">
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold tracking-widest text-text-muted uppercase">Starter</p>
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* Starter Plan */}
+            <div className="bg-surface-1 border border-border rounded-lg p-8 space-y-6">
+              <div>
+                <p className="text-[9px] font-bold tracking-widest text-text-muted uppercase mb-2">
+                  Starter
+                </p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold font-mono">$0</span>
-                  <span className="text-text-muted text-sm">/month</span>
+                  <span className="text-4xl font-bold">$0</span>
+                  <span className="text-text-muted">/month</span>
                 </div>
               </div>
+
               <ul className="space-y-3">
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">3 scans per month</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>10 scans per month</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">AI vulnerability detection</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Basic vulnerability detection</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">Code patch suggestions</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Community support</span>
                 </li>
               </ul>
-              <Link
-                href="/app"
-                className="block w-full px-6 py-3 bg-surface-1 border border-border text-foreground font-bold text-sm tracking-widest uppercase rounded-lg hover:border-accent-cyan/50 transition-all text-center"
+
+              <button
+                onClick={() => handleSelectPlan("starter")}
+                disabled={loadingPlan === "starter"}
+                className="w-full px-6 py-3 bg-surface-2 border border-border-subtle text-foreground font-bold text-sm tracking-widest uppercase rounded-lg hover:bg-surface-2/80 hover:border-border transition-all disabled:opacity-50"
               >
-                Start Free
-              </Link>
+                {loadingPlan === "starter" ? "Loading..." : "Get Started"}
+              </button>
             </div>
 
-            {/* Pro Tier */}
-            <div className="bg-background border-2 border-accent-cyan rounded-lg p-8 space-y-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 px-3 py-1 bg-accent-cyan text-background text-[9px] font-bold tracking-widest uppercase">
-                Popular
+            {/* Pro Plan */}
+            <div className="bg-surface-1 border-2 border-accent-cyan rounded-lg p-8 space-y-6 relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className="px-3 py-1 bg-accent-cyan text-background text-[9px] font-bold tracking-widest uppercase rounded-full">
+                  Popular
+                </span>
               </div>
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold tracking-widest text-accent-cyan uppercase">Pro</p>
+
+              <div>
+                <p className="text-[9px] font-bold tracking-widest text-text-muted uppercase mb-2">
+                  Pro
+                </p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold font-mono text-accent-cyan">$49</span>
-                  <span className="text-text-muted text-sm">/month</span>
+                  <span className="text-4xl font-bold text-accent-cyan">$49</span>
+                  <span className="text-text-muted">/month</span>
                 </div>
               </div>
+
               <ul className="space-y-3">
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-foreground font-medium">Unlimited scans</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Unlimited scans</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-foreground font-medium">Human expert review</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Advanced AI analysis</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-foreground font-medium">Priority support</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Human security review</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-foreground font-medium">API access</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Priority support</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>API access</span>
                 </li>
               </ul>
-              <Link
-                href="/app"
-                className="block w-full px-6 py-3 bg-accent-cyan text-background font-bold text-sm tracking-widest uppercase rounded-lg hover:bg-accent-cyan/90 transition-all text-center"
+
+              <button
+                onClick={() => handleSelectPlan("pro")}
+                disabled={loadingPlan === "pro"}
+                className="w-full px-6 py-3 bg-accent-cyan text-background font-bold text-sm tracking-widest uppercase rounded-lg hover:bg-accent-cyan/90 active:scale-[0.98] transition-all disabled:opacity-50"
               >
-                Get Started
-              </Link>
+                {loadingPlan === "pro" ? "Loading..." : "Subscribe Now"}
+              </button>
             </div>
 
-            {/* Enterprise */}
-            <div className="bg-background border border-border rounded-lg p-8 space-y-6">
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold tracking-widest text-text-muted uppercase">Enterprise</p>
+            {/* Enterprise Plan */}
+            <div className="bg-surface-1 border border-border rounded-lg p-8 space-y-6">
+              <div>
+                <p className="text-[9px] font-bold tracking-widest text-text-muted uppercase mb-2">
+                  Enterprise
+                </p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold font-mono">Custom</span>
+                  <span className="text-4xl font-bold">Custom</span>
                 </div>
               </div>
+
               <ul className="space-y-3">
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">White-label reporting</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Everything in Pro</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">Dedicated engineer</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Dedicated security team</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">SLA guarantees</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>Custom integrations</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0 mt-0.5" />
-                  <span className="text-text-muted">Custom integrations</span>
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>SLA guarantee</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
+                  <span>On-premise deployment</span>
                 </li>
               </ul>
-              <a
-                href="mailto:enterprise@vibecheck.dev"
-                className="block w-full px-6 py-3 bg-surface-1 border border-border text-foreground font-bold text-sm tracking-widest uppercase rounded-lg hover:border-accent-cyan/50 transition-all text-center"
+
+              <button
+                onClick={() => handleSelectPlan("enterprise")}
+                disabled={loadingPlan === "enterprise"}
+                className="w-full px-6 py-3 bg-surface-2 border border-border-subtle text-foreground font-bold text-sm tracking-widest uppercase rounded-lg hover:bg-surface-2/80 hover:border-border transition-all disabled:opacity-50"
               >
-                Contact Sales
-              </a>
+                {loadingPlan === "enterprise" ? "Loading..." : "Contact Sales"}
+              </button>
             </div>
           </div>
         </div>
