@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { ScanProgress } from "@/components/ScanProgress";
 import { ReportDashboard } from "@/components/ReportDashboard";
 import { FindingsList } from "@/components/FindingsList";
+import { Settings } from "@/components/Settings";
 
 type AppScreen = "home" | "scanning" | "report" | "findings";
 
@@ -126,12 +127,7 @@ export default function Home() {
     }
 
     if (activeTab === "settings") {
-      return (
-        <div className="text-center py-16 space-y-2">
-          <p className="text-sm text-text-muted">Settings</p>
-          <p className="text-[10px] text-text-dim uppercase tracking-widest">Coming soon</p>
-        </div>
-      );
+      return <Settings />;
     }
 
     return null;
