@@ -301,7 +301,7 @@ db.query(query, [userId]);`}
                 <h3 className="text-lg font-semibold">Get Verified Report</h3>
               </div>
               <p className="text-sm text-text-muted leading-relaxed pl-13">
-                Receive detailed findings with code patches, severity ratings, and expert notes—all reviewed by human security engineers.
+                Receive detailed findings with code patches, severity ratings, and expert notes—all reviewed by advanced agentic security agents.
               </p>
               <div className="mt-4 pl-13">
                 <div className="flex items-center gap-2">
