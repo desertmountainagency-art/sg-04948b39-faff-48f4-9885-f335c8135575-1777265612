@@ -153,6 +153,8 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          plan: string
+          scan_count: number
           updated_at: string | null
         }
         Insert: {
@@ -161,6 +163,8 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          plan?: string
+          scan_count?: number
           updated_at?: string | null
         }
         Update: {
@@ -169,9 +173,115 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          plan?: string
+          scan_count?: number
           updated_at?: string | null
         }
         Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          platform: string | null
+          repository_url: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          platform?: string | null
+          repository_url: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          platform?: string | null
+          repository_url?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scans: {
+        Row: {
+          audit_id: string | null
+          completed_at: string | null
+          created_at: string | null
+          critical_count: number
+          error_message: string | null
+          findings: Json
+          id: string
+          passed_count: number
+          project_id: string | null
+          status: string
+          target_url: string
+          user_id: string
+          warning_count: number
+        }
+        Insert: {
+          audit_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          critical_count?: number
+          error_message?: string | null
+          findings?: Json
+          id?: string
+          passed_count?: number
+          project_id?: string | null
+          status?: string
+          target_url: string
+          user_id: string
+          warning_count?: number
+        }
+        Update: {
+          audit_id?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          critical_count?: number
+          error_message?: string | null
+          findings?: Json
+          id?: string
+          passed_count?: number
+          project_id?: string | null
+          status?: string
+          target_url?: string
+          user_id?: string
+          warning_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scans_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scans_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       refunds: {
         Row: {
