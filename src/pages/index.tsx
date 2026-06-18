@@ -212,7 +212,7 @@ db.query(query, [userId]);`}
               </div>
               <h3 className="text-lg font-semibold mb-2">Human Like Verification</h3>
               <p className="text-sm text-text-muted leading-relaxed">
-                Expert advanced agentic security agents review AI findings, providing actionable insights and confirming zero false positives in critical alerts.
+                Expert advanced security agents review AI findings, providing actionable insights and confirming zero false positives in critical alerts.
               </p>
               <div className="mt-4 pt-4 border-t border-border-subtle">
                 <p className="text-[10px] font-bold font-mono tracking-widest text-accent-green uppercase">
@@ -421,10 +421,6 @@ db.query(query, [userId]);`}
                 <li className="flex items-start gap-2 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
                   <span>Advanced AI analysis</span>
-                </li>
-                <li className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
-                  <span>Human security review</span>
                 </li>
                 <li className="flex items-start gap-2 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-accent-green mt-0.5 flex-shrink-0" />
