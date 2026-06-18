@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import { SEO } from "@/components/SEO";
-import { authService } from "@/services/authService";
+import { authService } from "@/lib/authService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Bell, Zap, Key, User, Eye, EyeOff, Copy, Check, CreditCard, Download, ExternalLink, Loader2, LogOut, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { stripeService, StripePayment, StripeInvoice, StripeSubscription } from "@/services/stripeService";
+import { stripeService, StripePayment, StripeInvoice, StripeSubscription } from "@/lib/stripeService";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useRouter } from "next/router";
