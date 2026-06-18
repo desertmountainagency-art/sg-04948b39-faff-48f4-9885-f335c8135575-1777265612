@@ -1,35 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PROTECTED_PATHS = ["/app", "/dashboard", "/projects", "/billing", "/scans", "/onboarding"];
-
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  const isProtected = PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-  if (!isProtected) return NextResponse.next();
-
-  // Supabase v2 stores auth tokens in cookies named sb-<ref>-auth-token
-  const hasAuthCookie = request.cookies
-    .getAll()
-    .some((c) => c.name.includes("-auth-token") && c.value.length > 0);
-
-  if (!hasAuthCookie) {
-    const loginUrl = new URL("/auth", request.url);
-    loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
+export function middleware(_request: NextRequest) {
+  // Auth is enforced client-side via useAuth() in each protected page.
+  // @supabase/supabase-js v2 stores sessions in localStorage (not cookies),
+  // so cookie-based checks here would always fail and cause redirect loops.
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    "/app/:path*",
-    "/dashboard/:path*",
-    "/projects/:path*",
-    "/billing/:path*",
-    "/scans/:path*",
-    "/onboarding",
-  ],
+  matcher: [],
 };
