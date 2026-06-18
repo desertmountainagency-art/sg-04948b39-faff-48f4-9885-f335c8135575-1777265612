@@ -2,11 +2,13 @@ import { SEO } from "@/components/SEO";
 import { LandingHeader } from "@/components/LandingHeader";
 import { LandingFooter } from "@/components/LandingFooter";
 import Link from "next/link";
-import { Shield, Code, Users, CheckCircle2, Zap, Eye, ArrowRight, Github, Award, Clock, AlertTriangle, Terminal, Lock } from "lucide-react";
+import { Shield, Code, CheckCircle2, Zap, ArrowRight, Github, AlertTriangle, Terminal, Lock } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Landing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const { user, session } = useAuth();
 
   const handleSelectPlan = async (plan: "starter" | "pro" | "enterprise") => {
     if (plan === "enterprise") {
@@ -22,10 +24,13 @@ export default function Landing() {
     setLoadingPlan(plan);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
       const response = await fetch("/api/stripe/create-checkout-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        headers,
+        body: JSON.stringify({ plan, userId: user?.id, email: user?.email }),
       });
 
       const data = await response.json();
@@ -339,7 +344,7 @@ db.query(query, [userId]);`}
       </section>
 
       {/* Pricing Section */}
-      <section className="py-20">
+      <section id="pricing" className="py-20">
         <div className="container max-w-6xl">
           <div className="text-center mb-16">
             <p className="text-[10px] font-bold tracking-widest text-accent-cyan uppercase mb-3">

@@ -1,33 +1,33 @@
-import { useState, useEffect } from "react";
-import { Bell, Shield, Zap, Mail, Key, User, ChevronRight, Eye, EyeOff, Copy, Check, CreditCard, Download, ExternalLink, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Bell, Zap, Key, User, Eye, EyeOff, Copy, Check, CreditCard, Download, ExternalLink, Loader2, LogOut } from "lucide-react";
 import { stripeService, StripePayment, StripeInvoice, StripeSubscription } from "@/services/stripeService";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/router";
 
-interface SettingsState {
-  profile: {
-    name: string;
-    email: string;
-  };
-  notifications: {
-    pushNotifications: boolean;
-    criticalAlerts: boolean;
-    weeklyDigest: boolean;
-  };
-  scanPreferences: {
-    autoScanOnPush: boolean;
-  };
+interface NotificationSettings {
+  pushNotifications: boolean;
+  criticalAlerts: boolean;
+  weeklyDigest: boolean;
+}
+
+interface ScanPreferences {
+  autoScanOnPush: boolean;
+}
+
+interface LocalSettings {
+  notifications: NotificationSettings;
+  scanPreferences: ScanPreferences;
   apiKey: string;
-  isEditingProfile: boolean;
   showApiKey: boolean;
   copied: boolean;
   saved: boolean;
 }
 
 export function Settings() {
-  const [settings, setSettings] = useState<SettingsState>({
-    profile: {
-      name: "",
-      email: "",
-    },
+  const { user, session, signOut } = useAuth();
+  const router = useRouter();
+
+  const [settings, setSettings] = useState<LocalSettings>({
     notifications: {
       pushNotifications: true,
       criticalAlerts: true,
@@ -37,7 +37,6 @@ export function Settings() {
       autoScanOnPush: false,
     },
     apiKey: "",
-    isEditingProfile: false,
     showApiKey: false,
     copied: false,
     saved: false,
@@ -52,58 +51,56 @@ export function Settings() {
     subscription: null,
     payments: [],
     invoices: [],
-    loading: true,
+    loading: false,
   });
 
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
 
-  // Load settings from localStorage
+  const loadPaymentData = useCallback(
+    async (userId: string) => {
+      setPaymentData((prev) => ({ ...prev, loading: true }));
+
+      const [subscription, payments, invoices] = await Promise.all([
+        stripeService.getActiveSubscription(userId),
+        stripeService.getPaymentHistory(userId),
+        stripeService.getInvoices(userId),
+      ]);
+
+      setPaymentData({ subscription, payments, invoices, loading: false });
+    },
+    []
+  );
+
   useEffect(() => {
     const savedSettings = localStorage.getItem("vibecheck_settings");
     if (savedSettings) {
-      const parsed = JSON.parse(savedSettings);
-      setSettings((prev) => ({
-        ...prev,
-        ...parsed,
-      }));
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setSettings((prev) => ({ ...prev, ...parsed }));
+      } catch {
+        // ignore malformed stored settings
+      }
     }
-
-    // Load payment data (mock user ID for demo)
-    loadPaymentData("mock-user-id");
   }, []);
 
-  const loadPaymentData = async (userId: string) => {
-    setPaymentData((prev) => ({ ...prev, loading: true }));
+  useEffect(() => {
+    if (user?.id) {
+      loadPaymentData(user.id);
+    }
+  }, [user?.id, loadPaymentData]);
 
-    const [subscription, payments, invoices] = await Promise.all([
-      stripeService.getActiveSubscription(userId),
-      stripeService.getPaymentHistory(userId),
-      stripeService.getInvoices(userId),
-    ]);
-
-    setPaymentData({
-      subscription,
-      payments,
-      invoices,
-      loading: false,
-    });
-  };
-
-  const saveSettings = (newSettings: Partial<SettingsState>) => {
-    const updated = { ...settings, ...newSettings };
+  const persistSettings = (updates: Partial<LocalSettings>) => {
+    const updated = { ...settings, ...updates };
     setSettings(updated);
-    localStorage.setItem("vibecheck_settings", JSON.stringify(updated));
-
-    // Show saved indicator
+    const { showApiKey, copied, saved, ...storable } = updated;
+    localStorage.setItem("vibecheck_settings", JSON.stringify(storable));
     setSettings((prev) => ({ ...prev, saved: true }));
-    setTimeout(() => {
-      setSettings((prev) => ({ ...prev, saved: false }));
-    }, 2000);
+    setTimeout(() => setSettings((prev) => ({ ...prev, saved: false })), 2000);
   };
 
   const handleToggle = (category: "notifications" | "scanPreferences", key: string) => {
-    saveSettings({
+    persistSettings({
       [category]: {
         ...settings[category],
         [key]: !settings[category][key as keyof typeof settings[typeof category]],
@@ -111,36 +108,22 @@ export function Settings() {
     });
   };
 
-  const handleProfileEdit = () => {
-    if (settings.isEditingProfile) {
-      saveSettings({ isEditingProfile: false });
-    } else {
-      setSettings((prev) => ({ ...prev, isEditingProfile: true }));
-    }
-  };
-
-  const handleProfileChange = (field: "name" | "email", value: string) => {
-    setSettings((prev) => ({
-      ...prev,
-      profile: {
-        ...prev.profile,
-        [field]: value,
-      },
-    }));
-  };
-
   const handleGenerateApiKey = () => {
     const newKey = `vbc_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
-    saveSettings({ apiKey: newKey });
+    persistSettings({ apiKey: newKey });
   };
 
   const handleCopyApiKey = () => {
+    if (!settings.apiKey) return;
     navigator.clipboard.writeText(settings.apiKey);
     setSettings((prev) => ({ ...prev, copied: true }));
-    setTimeout(() => {
-      setSettings((prev) => ({ ...prev, copied: false }));
-    }, 2000);
+    setTimeout(() => setSettings((prev) => ({ ...prev, copied: false })), 2000);
   };
+
+  const authHeaders = () => ({
+    "Content-Type": "application/json",
+    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+  });
 
   const handleCancelSubscription = async () => {
     if (!paymentData.subscription) return;
@@ -149,14 +132,14 @@ export function Settings() {
     try {
       const response = await fetch("/api/stripe/cancel-subscription", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           subscriptionId: paymentData.subscription.stripe_subscription_id,
         }),
       });
 
-      if (response.ok) {
-        await loadPaymentData("mock-user-id");
+      if (response.ok && user?.id) {
+        await loadPaymentData(user.id);
       }
     } catch (error) {
       console.error("Error canceling subscription:", error);
@@ -170,7 +153,8 @@ export function Settings() {
     try {
       const response = await fetch("/api/stripe/create-portal-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
+        body: JSON.stringify({}),
       });
 
       const data = await response.json();
@@ -179,24 +163,28 @@ export function Settings() {
       }
     } catch (error) {
       console.error("Error opening portal:", error);
+    } finally {
       setOpeningPortal(false);
     }
   };
 
-  const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat("en-US", {
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/auth");
+  };
+
+  const formatCurrency = (amount: number, currency: string) =>
+    new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency.toUpperCase(),
     }).format(amount / 100);
-  };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
-  };
 
   return (
     <div className="space-y-6">
@@ -215,6 +203,33 @@ export function Settings() {
           </p>
         </div>
       )}
+
+      {/* Account Section */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <User className="w-4 h-4 text-accent-cyan" />
+          <h2 className="text-sm font-bold tracking-widest uppercase">Account</h2>
+        </div>
+
+        <div className="bg-surface-1 border border-border rounded-lg p-6 space-y-4">
+          <div className="space-y-1">
+            <p className="text-[9px] font-bold tracking-widest text-text-muted uppercase">Email</p>
+            <p className="text-sm font-mono text-foreground">{user?.email ?? "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[9px] font-bold tracking-widest text-text-muted uppercase">User ID</p>
+            <p className="text-xs font-mono text-text-dim truncate">{user?.id ?? "—"}</p>
+          </div>
+
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 px-4 py-2 bg-surface-2 border border-border-subtle text-text-muted font-bold text-xs tracking-widest uppercase rounded-lg hover:border-destructive hover:text-destructive transition-all"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign Out
+          </button>
+        </div>
+      </div>
 
       {/* Subscription Section */}
       {paymentData.loading ? (
@@ -371,48 +386,6 @@ export function Settings() {
         </div>
       )}
 
-      {/* Account Section */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <User className="w-4 h-4 text-accent-cyan" />
-          <h2 className="text-sm font-bold tracking-widest uppercase">Account</h2>
-        </div>
-
-        <div className="bg-surface-1 border border-border rounded-lg p-6 space-y-4">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold tracking-widest text-text-muted uppercase">Name</label>
-              <button
-                onClick={handleProfileEdit}
-                className="text-xs text-accent-cyan hover:text-accent-cyan/80"
-              >
-                {settings.isEditingProfile ? "Save" : "Edit"}
-              </button>
-            </div>
-            <input
-              type="text"
-              value={settings.profile.name}
-              onChange={(e) => handleProfileChange("name", e.target.value)}
-              disabled={!settings.isEditingProfile}
-              className="w-full px-4 py-2 bg-surface-2 border border-border-subtle rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-cyan/50"
-              placeholder="Enter your name"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <label className="text-xs font-bold tracking-widest text-text-muted uppercase">Email</label>
-            <input
-              type="email"
-              value={settings.profile.email}
-              onChange={(e) => handleProfileChange("email", e.target.value)}
-              disabled={!settings.isEditingProfile}
-              className="w-full px-4 py-2 bg-surface-2 border border-border-subtle rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-accent-cyan/50"
-              placeholder="your@email.com"
-            />
-          </div>
-        </div>
-      </div>
-
       {/* API Key Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
@@ -421,38 +394,34 @@ export function Settings() {
         </div>
 
         <div className="bg-surface-1 border border-border rounded-lg p-6 space-y-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <input
-                type={settings.showApiKey ? "text" : "password"}
-                value={settings.apiKey || "No API key generated"}
-                readOnly
-                className="flex-1 px-4 py-2 bg-surface-2 border border-border-subtle rounded text-sm font-mono"
-              />
-              <button
-                onClick={() => setSettings((prev) => ({ ...prev, showApiKey: !prev.showApiKey }))}
-                className="p-2 bg-surface-2 border border-border-subtle rounded hover:border-border transition-all"
-              >
-                {settings.showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={handleCopyApiKey}
-                disabled={!settings.apiKey}
-                className="p-2 bg-surface-2 border border-border-subtle rounded hover:border-border transition-all disabled:opacity-50"
-              >
-                {settings.copied ? <Check className="w-4 h-4 text-accent-green" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <input
+              type={settings.showApiKey ? "text" : "password"}
+              value={settings.apiKey || "No API key generated"}
+              readOnly
+              className="flex-1 px-4 py-2 bg-surface-2 border border-border-subtle rounded text-sm font-mono"
+            />
             <button
-              onClick={handleGenerateApiKey}
-              className="flex-1 px-4 py-2 bg-accent-cyan text-background font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-accent-cyan/90 transition-all"
+              onClick={() => setSettings((prev) => ({ ...prev, showApiKey: !prev.showApiKey }))}
+              className="p-2 bg-surface-2 border border-border-subtle rounded hover:border-border transition-all"
             >
-              {settings.apiKey ? "Rotate Key" : "Generate Key"}
+              {settings.showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={handleCopyApiKey}
+              disabled={!settings.apiKey}
+              className="p-2 bg-surface-2 border border-border-subtle rounded hover:border-border transition-all disabled:opacity-50"
+            >
+              {settings.copied ? <Check className="w-4 h-4 text-accent-green" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
+
+          <button
+            onClick={handleGenerateApiKey}
+            className="w-full px-4 py-2 bg-accent-cyan text-background font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-accent-cyan/90 transition-all"
+          >
+            {settings.apiKey ? "Rotate Key" : "Generate Key"}
+          </button>
 
           <p className="text-xs text-text-dim">
             Use this API key to integrate vibecheck.dev scans into your CI/CD pipeline
@@ -468,66 +437,36 @@ export function Settings() {
         </div>
 
         <div className="bg-surface-1 border border-border rounded-lg divide-y divide-border">
-          <div className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Push Notifications</p>
-              <p className="text-xs text-text-muted mt-1">Receive alerts on your device</p>
-            </div>
-            <button
-              onClick={() => handleToggle("notifications", "pushNotifications")}
-              className={`relative w-11 h-6 rounded-full transition-all ${
-                settings.notifications.pushNotifications ? "bg-accent-cyan" : "bg-surface-2 border border-border-subtle"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-background rounded-full transition-transform ${
-                  settings.notifications.pushNotifications ? "translate-x-5" : ""
+          {(
+            [
+              { key: "pushNotifications", label: "Push Notifications", desc: "Receive alerts on your device" },
+              { key: "criticalAlerts", label: "Critical Alerts", desc: "High severity vulnerabilities" },
+              { key: "weeklyDigest", label: "Weekly Digest", desc: "Summary of scan activity" },
+            ] as const
+          ).map(({ key, label, desc }) => (
+            <div key={key} className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-text-muted mt-1">{desc}</p>
+              </div>
+              <button
+                onClick={() => handleToggle("notifications", key)}
+                className={`relative w-11 h-6 rounded-full transition-all ${
+                  settings.notifications[key] ? "bg-accent-cyan" : "bg-surface-2 border border-border-subtle"
                 }`}
-              />
-            </button>
-          </div>
-
-          <div className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Critical Alerts</p>
-              <p className="text-xs text-text-muted mt-1">High severity vulnerabilities</p>
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-background rounded-full transition-transform ${
+                    settings.notifications[key] ? "translate-x-5" : ""
+                  }`}
+                />
+              </button>
             </div>
-            <button
-              onClick={() => handleToggle("notifications", "criticalAlerts")}
-              className={`relative w-11 h-6 rounded-full transition-all ${
-                settings.notifications.criticalAlerts ? "bg-accent-cyan" : "bg-surface-2 border border-border-subtle"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-background rounded-full transition-transform ${
-                  settings.notifications.criticalAlerts ? "translate-x-5" : ""
-                }`}
-              />
-            </button>
-          </div>
-
-          <div className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Weekly Digest</p>
-              <p className="text-xs text-text-muted mt-1">Summary of scan activity</p>
-            </div>
-            <button
-              onClick={() => handleToggle("notifications", "weeklyDigest")}
-              className={`relative w-11 h-6 rounded-full transition-all ${
-                settings.notifications.weeklyDigest ? "bg-accent-cyan" : "bg-surface-2 border border-border-subtle"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-background rounded-full transition-transform ${
-                  settings.notifications.weeklyDigest ? "translate-x-5" : ""
-                }`}
-              />
-            </button>
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* Scan Preferences Section */}
+      {/* Scan Preferences */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Zap className="w-4 h-4 text-accent-cyan" />
@@ -558,9 +497,7 @@ export function Settings() {
 
       {/* App Info */}
       <div className="pt-6 border-t border-border">
-        <p className="text-xs text-text-dim text-center font-mono">
-          vibecheck.dev v1.0.0
-        </p>
+        <p className="text-xs text-text-dim text-center font-mono">vibecheck.dev v1.0.0</p>
         <p className="text-[9px] text-text-dim text-center mt-1 uppercase tracking-widest">
           © 2026 vibecheck.dev
         </p>

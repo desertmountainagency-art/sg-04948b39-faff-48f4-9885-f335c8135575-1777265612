@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import { SEO } from "@/components/SEO";
 import { BottomNav } from "@/components/BottomNav";
