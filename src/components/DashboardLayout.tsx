@@ -186,6 +186,3 @@ export function DashboardLayout({ children, breadcrumbs }: DashboardLayoutProps)
     </div>
   );
 }
-
-
-export { DashboardLayout }

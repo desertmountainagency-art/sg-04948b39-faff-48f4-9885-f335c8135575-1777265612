@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getAuthUser, createAdminClient } from "@/lib/supabase-server";
 import { generateAuditId, runAnalysis, validateTargetUrl } from "@/lib/vibecheck";
+import { sendScanCompleted, sendCriticalVuln } from "@/lib/email";
 
 const ANALYSIS_TIMEOUT_MS = 55_000;
 
@@ -128,6 +129,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         completed_at: new Date().toISOString(),
       })
       .eq("id", scanId);
+
+    // Transactional emails — fire-and-forget
+    const userEmail = user.email;
+    if (userEmail) {
+      const { data: scanRow } = await db.from("scans").select("audit_id").eq("id", scanId).single();
+      const auditId = scanRow?.audit_id ?? scanId;
+
+      sendScanCompleted({
+        userEmail,
+        targetUrl,
+        auditId,
+        criticalCount: critical_count,
+        warningCount: warning_count,
+        passedCount: passed_count,
+        projectId: project.id,
+        scanId,
+      }).catch((e) => console.error("[email] sendScanCompleted failed:", e));
+
+      if (critical_count > 0) {
+        const topFindings = (findings as { title: string; severity: string; cwe?: string }[])
+          .filter((f) => f.severity === "critical")
+          .slice(0, 3)
+          .map((f) => ({ title: f.title, cwe: f.cwe }));
+
+        sendCriticalVuln({
+          userEmail,
+          targetUrl,
+          auditId,
+          criticalCount: critical_count,
+          topFindings,
+          projectId: project.id,
+          scanId,
+        }).catch((e) => console.error("[email] sendCriticalVuln failed:", e));
+      }
+    }
   } catch (err) {
     console.error(`Project scan ${scanId} failed:`, err);
     await db

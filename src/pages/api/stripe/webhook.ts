@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 import { buffer } from "micro";
+import { sendSubscriptionUpdated } from "@/lib/email";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2023-10-16",
@@ -86,6 +87,19 @@ export default async function handler(
   }
 }
 
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+async function getCustomerEmail(stripeCustomerId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from("customers")
+    .select("email")
+    .eq("stripe_customer_id", stripeCustomerId)
+    .maybeSingle();
+  return data?.email ?? null;
+}
+
+// ─── handlers ─────────────────────────────────────────────────────────────────
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const { data: customer } = await supabaseAdmin
     .from("customers")
@@ -98,12 +112,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .single();
 
   if (customer && session.subscription) {
+    const plan = (session.metadata?.plan as "pro" | "enterprise") || "pro";
     await supabaseAdmin.from("subscriptions").insert({
       customer_id: customer.id,
       stripe_subscription_id: session.subscription as string,
-      plan: (session.metadata?.plan as "pro" | "enterprise") || "pro",
+      plan,
       status: "active",
     });
+
+    const email = customer.email;
+    if (email) {
+      sendSubscriptionUpdated({ userEmail: email, plan, event: "activated" })
+        .catch((e) => console.error("[email] subscription activated email failed:", e));
+    }
   }
 }
 
@@ -142,7 +163,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const { data: customer } = await supabaseAdmin
     .from("customers")
-    .select("id")
+    .select("id, email")
     .eq("stripe_customer_id", invoice.customer as string)
     .single();
 
@@ -151,10 +172,22 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
       .from("subscriptions")
       .update({ status: "past_due" })
       .eq("stripe_subscription_id", invoice.subscription as string);
+
+    if (customer.email) {
+      sendSubscriptionUpdated({ userEmail: customer.email, plan: "pro", event: "payment_failed" })
+        .catch((e) => console.error("[email] payment_failed email failed:", e));
+    }
   }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  // Read the previous record to detect meaningful state transitions
+  const { data: existing } = await supabaseAdmin
+    .from("subscriptions")
+    .select("status, cancel_at_period_end, plan")
+    .eq("stripe_subscription_id", subscription.id)
+    .maybeSingle();
+
   await supabaseAdmin
     .from("subscriptions")
     .update({
@@ -164,6 +197,28 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       cancel_at_period_end: subscription.cancel_at_period_end,
     })
     .eq("stripe_subscription_id", subscription.id);
+
+  const email = await getCustomerEmail(subscription.customer as string);
+  if (!email) return;
+
+  const plan = existing?.plan ?? "pro";
+  const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+  const wasActive = existing?.status === "active";
+  const nowActive = subscription.status === "active";
+
+  if (!existing?.cancel_at_period_end && subscription.cancel_at_period_end) {
+    // Just scheduled for cancellation
+    sendSubscriptionUpdated({ userEmail: email, plan, event: "cancelled", periodEnd })
+      .catch((e) => console.error("[email] cancelled email failed:", e));
+  } else if (existing?.cancel_at_period_end && !subscription.cancel_at_period_end && nowActive) {
+    // Cancellation was reversed
+    sendSubscriptionUpdated({ userEmail: email, plan, event: "reactivated", periodEnd })
+      .catch((e) => console.error("[email] reactivated email failed:", e));
+  } else if (!wasActive && nowActive) {
+    // Renewed after lapse / reactivated from past_due
+    sendSubscriptionUpdated({ userEmail: email, plan, event: "renewed", periodEnd })
+      .catch((e) => console.error("[email] renewed email failed:", e));
+  }
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
@@ -171,6 +226,13 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     .from("subscriptions")
     .update({ status: "canceled" })
     .eq("stripe_subscription_id", subscription.id);
+
+  const email = await getCustomerEmail(subscription.customer as string);
+  if (email) {
+    const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+    sendSubscriptionUpdated({ userEmail: email, plan: "pro", event: "cancelled", periodEnd })
+      .catch((e) => console.error("[email] deleted/cancelled email failed:", e));
+  }
 }
 
 async function handleRefund(charge: Stripe.Charge) {
