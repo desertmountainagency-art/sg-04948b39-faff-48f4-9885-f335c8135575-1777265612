@@ -210,9 +210,9 @@ db.query(query, [userId]);`}
               <div className="w-12 h-12 rounded-lg bg-accent-green/10 border border-accent-green/30 flex items-center justify-center mb-4 group-hover:bg-accent-green/20 transition-colors">
                 <Shield className="w-6 h-6 text-accent-green" strokeWidth={2} />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Human Verification</h3>
+              <h3 className="text-lg font-semibold mb-2">Human Like Verification</h3>
               <p className="text-sm text-text-muted leading-relaxed">
-                Expert security engineers review AI findings, providing actionable insights and confirming zero false positives in critical alerts.
+                Expert advanced agentic security agents review AI findings, providing actionable insights and confirming zero false positives in critical alerts.
               </p>
               <div className="mt-4 pt-4 border-t border-border-subtle">
                 <p className="text-[10px] font-bold font-mono tracking-widest text-accent-green uppercase">
