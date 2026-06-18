@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function Landing() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-  const { user, session } = useAuth();
+  const { session } = useAuth();
 
   const handleSelectPlan = async (plan: "starter" | "pro" | "enterprise") => {
     if (plan === "enterprise") {
@@ -27,10 +27,10 @@ export default function Landing() {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
 
-      const response = await fetch("/api/stripe/create-checkout-session", {
+      const response = await fetch("/api/billing/create-checkout-session", {
         method: "POST",
         headers,
-        body: JSON.stringify({ plan, userId: user?.id, email: user?.email }),
+        body: JSON.stringify({ plan }),
       });
 
       const data = await response.json();

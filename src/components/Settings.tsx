@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Zap, Key, User, Eye, EyeOff, Copy, Check, CreditCard, Download, ExternalLink, Loader2, LogOut } from "lucide-react";
+import { Bell, Zap, Key, User, Eye, EyeOff, Copy, Check, CreditCard, Download, ExternalLink, Loader2, LogOut, ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { stripeService, StripePayment, StripeInvoice, StripeSubscription } from "@/services/stripeService";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/hooks/use-subscription";
 import { useRouter } from "next/router";
 
 interface NotificationSettings {
@@ -25,6 +27,7 @@ interface LocalSettings {
 
 export function Settings() {
   const { user, session, signOut } = useAuth();
+  const subscription = useSubscription();
   const router = useRouter();
 
   const [settings, setSettings] = useState<LocalSettings>({
@@ -130,7 +133,7 @@ export function Settings() {
 
     setCancelingSubscription(true);
     try {
-      const response = await fetch("/api/stripe/cancel-subscription", {
+      const response = await fetch("/api/billing/cancel-subscription", {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -151,7 +154,7 @@ export function Settings() {
   const handleOpenCustomerPortal = async () => {
     setOpeningPortal(true);
     try {
-      const response = await fetch("/api/stripe/create-portal-session", {
+      const response = await fetch("/api/billing/create-portal-session", {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({}),
@@ -230,6 +233,29 @@ export function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Upgrade prompt for starter plan */}
+      {!subscription.loading && !subscription.isPro && !paymentData.subscription && (
+        <div className="bg-gradient-to-br from-accent-cyan/10 to-accent-green/10 border border-accent-cyan/30 rounded-xl p-5 space-y-4">
+          <div>
+            <p className="text-[9px] font-bold tracking-widest text-accent-cyan uppercase mb-1">Free Plan</p>
+            <p className="text-sm font-semibold">
+              {subscription.scansRemaining} of 10 free scans remaining this month
+            </p>
+          </div>
+          <p className="text-xs text-text-muted leading-relaxed">
+            Upgrade to Pro for unlimited scans, advanced AI analysis, human security review, and API access.
+          </p>
+          <Link
+            href="/#pricing"
+            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-accent-cyan text-background font-bold text-xs tracking-widest uppercase rounded-lg hover:bg-accent-cyan/90 transition-all"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Upgrade to Pro — $49/mo
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Subscription Section */}
       {paymentData.loading ? (
