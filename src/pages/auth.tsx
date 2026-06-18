@@ -17,7 +17,7 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const redirectTo = (router.query.redirectTo as string) || "/app";
+  const redirectTo = (router.query.redirectTo as string) || "/dashboard";
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -47,8 +47,8 @@ export default function Auth() {
         if (error) {
           setError(error.message);
         } else {
-          setSuccess("Account created. You can now sign in.");
-          setMode("signin");
+          // New users go through onboarding before the main app
+          router.replace("/onboarding");
         }
         return;
       }

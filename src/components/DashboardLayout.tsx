@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { Shield, LayoutDashboard, FolderOpen, Settings, LogOut, ChevronRight, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useOnboarding } from "@/hooks/use-onboarding";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -27,7 +28,14 @@ export function DashboardLayout({ children, breadcrumbs }: DashboardLayoutProps)
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { plan, isPro } = useSubscription();
+  const { completed, loading: onboardingLoading } = useOnboarding();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Gate: send users who haven't finished onboarding back to the wizard
+  useEffect(() => {
+    if (onboardingLoading) return;
+    if (completed === false) router.replace("/onboarding");
+  }, [completed, onboardingLoading, router]);
 
   const isActive = (item: NavItem) =>
     item.exact
@@ -178,3 +186,6 @@ export function DashboardLayout({ children, breadcrumbs }: DashboardLayoutProps)
     </div>
   );
 }
+
+
+export { DashboardLayout }
