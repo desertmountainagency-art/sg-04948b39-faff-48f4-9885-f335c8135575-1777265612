@@ -9,6 +9,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription, FREE_SCAN_LIMIT } from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { DashboardPageSkeleton, ErrorBanner } from "@/components/Skeletons";
 import { cn } from "@/lib/utils";
 import type { ScanRecord } from "@/lib/vibecheck";
 
@@ -29,9 +31,16 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Show checkout success toast
+  // Show checkout success toast after redirect
   const checkoutSuccess = router.query.checkout === "success";
+  useEffect(() => {
+    if (checkoutSuccess) {
+      toast({ title: "Upgrade successful!", description: `Welcome to the ${plan} plan.` });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutSuccess]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -43,34 +52,45 @@ export default function Dashboard() {
   async function fetchDashboard() {
     if (!user) return;
     setLoadingData(true);
+    setFetchError(null);
 
-    const [projectsRes, scansRes, recentRes] = await Promise.all([
-      supabase.from("projects").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("scans").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase
+    try {
+      const [projectsRes, scansRes, recentRes] = await Promise.all([
+        supabase.from("projects").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("scans").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase
+          .from("scans")
+          .select("id, audit_id, status, target_url, critical_count, warning_count, passed_count, created_at, completed_at, project_id")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(6),
+      ]);
+
+      if (projectsRes.error) throw projectsRes.error;
+      if (scansRes.error) throw scansRes.error;
+      if (recentRes.error) throw recentRes.error;
+
+      const { count: criticalOpen } = await supabase
         .from("scans")
-        .select("id, audit_id, status, target_url, critical_count, warning_count, passed_count, created_at, completed_at, project_id")
+        .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(6),
-    ]);
+        .eq("status", "completed")
+        .gt("critical_count", 0);
 
-    // Count open criticals (scans completed with critical_count > 0)
-    const { count: criticalOpen } = await supabase
-      .from("scans")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("status", "completed")
-      .gt("critical_count", 0);
-
-    setStats({
-      totalProjects: projectsRes.count ?? 0,
-      totalScans: scansRes.count ?? 0,
-      criticalOpen: criticalOpen ?? 0,
-      lastScanDate: recentRes.data?.[0]?.created_at ?? null,
-    });
-    setRecentScans((recentRes.data ?? []) as RecentScan[]);
-    setLoadingData(false);
+      setStats({
+        totalProjects: projectsRes.count ?? 0,
+        totalScans: scansRes.count ?? 0,
+        criticalOpen: criticalOpen ?? 0,
+        lastScanDate: recentRes.data?.[0]?.created_at ?? null,
+      });
+      setRecentScans((recentRes.data ?? []) as RecentScan[]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load dashboard data";
+      setFetchError(message);
+      toast({ title: "Failed to load dashboard", description: message, variant: "destructive" });
+    } finally {
+      setLoadingData(false);
+    }
   }
 
   const formatDate = (iso: string | null) => {
@@ -103,19 +123,16 @@ export default function Dashboard() {
   if (authLoading || loadingData) {
     return (
       <DashboardLayout breadcrumbs={[{ label: "Dashboard" }]}>
-        <DashboardSkeleton />
+        <DashboardPageSkeleton />
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout breadcrumbs={[{ label: "Dashboard" }]}>
-      {checkoutSuccess && (
-        <div className="mb-6 px-4 py-3 bg-accent-green/10 border border-accent-green/30 rounded-lg flex items-center gap-3">
-          <CheckCircle2 className="w-4 h-4 text-accent-green flex-shrink-0" />
-          <p className="text-sm text-accent-green font-medium">
-            Upgrade successful — welcome to {plan}!
-          </p>
+      {fetchError && (
+        <div className="mb-6">
+          <ErrorBanner message={fetchError} onRetry={fetchDashboard} />
         </div>
       )}
 
@@ -337,20 +354,3 @@ function EmptyScans() {
   );
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-8 animate-pulse">
-      <div className="h-8 w-40 bg-surface-2 rounded" />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 bg-surface-1 border border-border rounded-xl" />
-        ))}
-      </div>
-      <div className="space-y-3">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-14 bg-surface-1 border border-border rounded-lg" />
-        ))}
-      </div>
-    </div>
-  );
-}

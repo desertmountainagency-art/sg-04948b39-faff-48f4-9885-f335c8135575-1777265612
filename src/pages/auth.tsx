@@ -4,6 +4,7 @@ import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import { SEO } from "@/components/SEO";
 import { authService } from "@/services/authService";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 type AuthMode = "signin" | "signup" | "reset";
 
@@ -36,8 +37,10 @@ export default function Auth() {
         const { error } = await authService.resetPassword(email);
         if (error) {
           setError(error.message);
+          toast({ title: "Reset failed", description: error.message, variant: "destructive" });
         } else {
           setSuccess("Password reset link sent. Check your email.");
+          toast({ title: "Check your email", description: "A password reset link has been sent." });
         }
         return;
       }
@@ -46,8 +49,9 @@ export default function Auth() {
         const { error } = await authService.signUp(email, password);
         if (error) {
           setError(error.message);
+          toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
         } else {
-          // New users go through onboarding before the main app
+          toast({ title: "Account created!", description: "Let's set up your first project." });
           router.replace("/onboarding");
         }
         return;
@@ -56,7 +60,9 @@ export default function Auth() {
       const { error } = await authService.signIn(email, password);
       if (error) {
         setError(error.message);
+        toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
       } else {
+        toast({ title: "Welcome back!" });
         router.replace(redirectTo);
       }
     } finally {

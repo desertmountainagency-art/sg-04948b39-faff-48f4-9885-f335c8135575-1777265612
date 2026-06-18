@@ -3,13 +3,15 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import {
   AlertTriangle, CheckCircle2, Clock, ExternalLink, Play, Loader2,
-  Github, Globe, ArrowLeft, MoreHorizontal, XCircle
+  Github, Globe, MoreHorizontal, XCircle
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/use-subscription";
 import { supabase } from "@/integrations/supabase/client";
 import { getScanStatus } from "@/lib/vibecheck";
+import { toast } from "@/hooks/use-toast";
+import { ProjectDetailSkeleton, ErrorBanner } from "@/components/Skeletons";
 import { cn } from "@/lib/utils";
 import type { ScanRecord } from "@/lib/vibecheck";
 
@@ -33,6 +35,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [scans, setScans] = useState<ScanRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [activeScanId, setActiveScanId] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -50,10 +53,28 @@ export default function ProjectDetail() {
     const iv = setInterval(async () => {
       try {
         const { scan } = await getScanStatus(activeScanId, session.access_token);
-        if (scan.status === "completed" || scan.status === "failed") {
+        if (scan.status === "completed") {
           setActiveScanId(null);
           setScanning(false);
           refreshScans();
+          if (scan.critical_count > 0) {
+            toast({
+              title: `Scan complete — ${scan.critical_count} critical ${scan.critical_count === 1 ? "issue" : "issues"} found`,
+              description: "Review the findings and apply suggested patches.",
+              variant: "destructive",
+            });
+          } else {
+            toast({ title: "Scan complete — all clear!", description: "No critical vulnerabilities detected." });
+          }
+        } else if (scan.status === "failed") {
+          setActiveScanId(null);
+          setScanning(false);
+          refreshScans();
+          toast({
+            title: "Scan failed",
+            description: scan.error_message ?? "The scan encountered an error. Please try again.",
+            variant: "destructive",
+          });
         }
       } catch { /* ignore transient */ }
     }, 2500);
@@ -64,14 +85,26 @@ export default function ProjectDetail() {
   async function fetchProject() {
     if (!session?.access_token || !id) return;
     setLoading(true);
-    const res = await fetch(`/api/projects/${id}/get`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
-    if (!res.ok) { router.push("/projects"); return; }
-    const { project: p, scans: s } = await res.json();
-    setProject(p);
-    setScans(s);
-    setLoading(false);
+    setFetchError(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/get`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) {
+        if (res.status === 404) { router.push("/projects"); return; }
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? `Failed to load project (${res.status})`);
+      }
+      const { project: p, scans: s } = await res.json();
+      setProject(p);
+      setScans(s);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load project";
+      setFetchError(message);
+      toast({ title: "Failed to load project", description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function refreshScans() {
@@ -100,11 +133,14 @@ export default function ProjectDetail() {
     });
     const json = await res.json();
     if (!res.ok) {
-      setScanError(json.error ?? "Failed to start scan");
+      const errMsg = json.error ?? "Failed to start scan";
+      setScanError(errMsg);
+      toast({ title: "Scan failed to start", description: errMsg, variant: "destructive" });
       setScanning(false);
       return;
     }
 
+    toast({ title: "Scan started", description: "Analyzing your project for vulnerabilities…" });
     setActiveScanId(json.scanId);
     refreshScans();
   }
@@ -126,7 +162,15 @@ export default function ProjectDetail() {
   if (authLoading || loading) {
     return (
       <DashboardLayout breadcrumbs={[{ label: "Projects", href: "/projects" }, { label: "..." }]}>
-        <ProjectSkeleton />
+        <ProjectDetailSkeleton />
+      </DashboardLayout>
+    );
+  }
+
+  if (fetchError && !project) {
+    return (
+      <DashboardLayout breadcrumbs={[{ label: "Projects", href: "/projects" }, { label: "Error" }]}>
+        <ErrorBanner message={fetchError} onRetry={fetchProject} />
       </DashboardLayout>
     );
   }
@@ -318,22 +362,3 @@ export default function ProjectDetail() {
   );
 }
 
-function ProjectSkeleton() {
-  return (
-    <div className="space-y-8 animate-pulse">
-      <div className="flex items-start gap-4">
-        <div className="w-10 h-10 bg-surface-2 rounded-lg" />
-        <div className="space-y-2 flex-1">
-          <div className="h-6 w-40 bg-surface-2 rounded" />
-          <div className="h-4 w-64 bg-surface-2 rounded" />
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-surface-1 border border-border rounded-lg" />)}
-      </div>
-      <div className="space-y-2">
-        {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-surface-1 border border-border rounded-lg" />)}
-      </div>
-    </div>
-  );
-}

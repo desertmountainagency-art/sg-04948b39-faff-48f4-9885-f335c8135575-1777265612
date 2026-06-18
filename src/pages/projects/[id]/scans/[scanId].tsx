@@ -3,15 +3,15 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import {
   Shield, AlertTriangle, CheckCircle2, Copy, Check, ChevronDown, ChevronUp,
-  Clock, ExternalLink, ArrowLeft
+  Clock, ExternalLink
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { getScanStatus } from "@/lib/vibecheck";
+import { toast } from "@/hooks/use-toast";
+import { ScanDetailSkeleton, ErrorBanner } from "@/components/Skeletons";
 import { cn } from "@/lib/utils";
 import type { ScanRecord, ScanFinding, FindingSeverity } from "@/lib/vibecheck";
-
-const SEVERITY_ORDER: FindingSeverity[] = ["critical", "warning", "info"];
 
 export default function ScanDetail() {
   const router = useRouter();
@@ -20,6 +20,7 @@ export default function ScanDetail() {
 
   const [scan, setScan] = useState<ScanRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<FindingSeverity | "all">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -39,13 +40,17 @@ export default function ScanDetail() {
   async function fetchScan() {
     if (!scanId || !session?.access_token) return;
     setLoading(true);
+    setFetchError(null);
     try {
       const { scan: s } = await getScanStatus(scanId, session.access_token);
       setScan(s);
-    } catch {
-      router.push(`/projects/${id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load scan report";
+      setFetchError(message);
+      toast({ title: "Failed to load scan", description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function fetchProjectName() {
@@ -85,6 +90,20 @@ export default function ScanDetail() {
         ]}
       >
         <ScanDetailSkeleton />
+      </DashboardLayout>
+    );
+  }
+
+  if (fetchError && !scan) {
+    return (
+      <DashboardLayout
+        breadcrumbs={[
+          { label: "Projects", href: "/projects" },
+          { label: projectName ?? "Project", href: `/projects/${id}` },
+          { label: "Error" },
+        ]}
+      >
+        <ErrorBanner message={fetchError} onRetry={fetchScan} />
       </DashboardLayout>
     );
   }
@@ -342,6 +361,7 @@ function DiffViewer({ finding }: { finding: ScanFinding }) {
   const handleCopy = (text: string, type: "vuln" | "fix") => {
     navigator.clipboard.writeText(text);
     setCopied(type);
+    toast({ title: type === "fix" ? "Secure code copied" : "Code copied" });
     setTimeout(() => setCopied(null), 2000);
   };
 
@@ -422,20 +442,3 @@ function DiffViewer({ finding }: { finding: ScanFinding }) {
   );
 }
 
-function ScanDetailSkeleton() {
-  return (
-    <div className="space-y-8 animate-pulse">
-      <div className="space-y-2">
-        <div className="h-4 w-24 bg-surface-2 rounded" />
-        <div className="h-8 w-48 bg-surface-2 rounded" />
-      </div>
-      <div className="grid grid-cols-3 gap-4">
-        {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-surface-1 border border-border rounded-xl" />)}
-      </div>
-      <div className="h-24 bg-surface-1 border border-border rounded-xl" />
-      <div className="space-y-3">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-surface-1 border border-border rounded-xl" />)}
-      </div>
-    </div>
-  );
-}

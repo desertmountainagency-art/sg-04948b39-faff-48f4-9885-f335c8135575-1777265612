@@ -8,6 +8,8 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { ProjectsPageSkeleton, ErrorBanner } from "@/components/Skeletons";
 import { cn } from "@/lib/utils";
 
 const PLATFORMS = ["github", "lovable", "replit", "bolt", "cursor", "v0", "other"] as const;
@@ -37,6 +39,7 @@ export default function Projects() {
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
@@ -53,40 +56,47 @@ export default function Projects() {
   async function fetchProjects() {
     if (!user) return;
     setLoading(true);
+    setFetchError(null);
 
-    const { data } = await supabase
-      .from("projects")
-      .select("id, name, repository_url, platform, description, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name, repository_url, platform, description, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    if (!data) { setLoading(false); return; }
+      if (error) throw error;
+      if (!data) { setLoading(false); return; }
 
-    // Fetch last scan for each project in a single query
-    const projectIds = data.map((p) => p.id);
-    const { data: scans } = await supabase
-      .from("scans")
-      .select("project_id, status, critical_count, warning_count, completed_at, created_at")
-      .in("project_id", projectIds)
-      .order("created_at", { ascending: false });
+      const projectIds = data.map((p) => p.id);
+      const { data: scans } = await supabase
+        .from("scans")
+        .select("project_id, status, critical_count, warning_count, completed_at, created_at")
+        .in("project_id", projectIds)
+        .order("created_at", { ascending: false });
 
-    // Group: keep most recent scan per project
-    const latestByProject = new Map<string, typeof scans extends (infer T)[] | null ? T : never>();
-    for (const scan of scans ?? []) {
-      if (!scan.project_id) continue;
-      if (!latestByProject.has(scan.project_id)) {
-        latestByProject.set(scan.project_id, scan);
+      const latestByProject = new Map<string, typeof scans extends (infer T)[] | null ? T : never>();
+      for (const scan of scans ?? []) {
+        if (!scan.project_id) continue;
+        if (!latestByProject.has(scan.project_id)) {
+          latestByProject.set(scan.project_id, scan);
+        }
       }
-    }
 
-    setProjects(
-      data.map((p) => ({
-        ...p,
-        platform: p.platform as Platform | null,
-        last_scan: latestByProject.get(p.id) ?? null,
-      }))
-    );
-    setLoading(false);
+      setProjects(
+        data.map((p) => ({
+          ...p,
+          platform: p.platform as Platform | null,
+          last_scan: latestByProject.get(p.id) ?? null,
+        }))
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load projects";
+      setFetchError(message);
+      toast({ title: "Failed to load projects", description: message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -115,10 +125,13 @@ export default function Projects() {
     setCreating(false);
 
     if (!res.ok) {
-      setFormError(json.error ?? "Failed to create project");
+      const errMsg = json.error ?? "Failed to create project";
+      setFormError(errMsg);
+      toast({ title: "Project creation failed", description: errMsg, variant: "destructive" });
       return;
     }
 
+    toast({ title: "Project created!", description: `"${json.project.name}" is ready to scan.` });
     setShowForm(false);
     router.push(`/projects/${json.project.id}`);
   }
@@ -135,7 +148,7 @@ export default function Projects() {
   if (authLoading || loading) {
     return (
       <DashboardLayout breadcrumbs={[{ label: "Projects" }]}>
-        <ProjectsSkeleton />
+        <ProjectsPageSkeleton />
       </DashboardLayout>
     );
   }
@@ -143,6 +156,8 @@ export default function Projects() {
   return (
     <DashboardLayout breadcrumbs={[{ label: "Projects" }]}>
       <div className="space-y-6">
+        {fetchError && <ErrorBanner message={fetchError} onRetry={fetchProjects} />}
+
         {/* Header */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -342,13 +357,3 @@ function EmptyProjects({ onNew }: { onNew: () => void }) {
   );
 }
 
-function ProjectsSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="h-8 w-32 bg-surface-2 rounded" />
-      {[...Array(3)].map((_, i) => (
-        <div key={i} className="h-24 bg-surface-1 border border-border rounded-xl" />
-      ))}
-    </div>
-  );
-}
