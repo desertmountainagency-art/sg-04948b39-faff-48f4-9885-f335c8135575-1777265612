@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getAuthUser, createAdminClient } from "@/lib/supabase-server";
+import { getAuthUser, getTokenFromRequest, createUserClient } from "@/lib/supabase-server";
 import type { ScanRecord } from "@/lib/vibecheck";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -7,8 +7,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const token = getTokenFromRequest(req);
   const user = await getAuthUser(req);
-  if (!user) {
+  if (!user || !token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -17,14 +18,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "Missing or invalid scanId" });
   }
 
-  const db = createAdminClient();
+  const db = createUserClient(token);
   const { data, error } = await db
     .from("scans")
     .select(
       "id, user_id, target_url, status, audit_id, critical_count, warning_count, passed_count, findings, error_message, created_at, completed_at"
     )
     .eq("id", scanId.trim())
-    .eq("user_id", user.id) // RLS-equivalent guard: only owner can poll
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (error) {
@@ -36,7 +37,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(404).json({ error: "Scan not found" });
   }
 
-  // Cache completed/failed results for 60 s; in-progress results not cached
   const isTerminal = data.status === "completed" || data.status === "failed";
   res.setHeader("Cache-Control", isTerminal ? "public, max-age=60" : "no-store");
 

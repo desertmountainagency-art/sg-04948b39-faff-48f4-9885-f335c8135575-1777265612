@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getAuthUser, createAdminClient } from "@/lib/supabase-server";
+import { getAuthUser, getTokenFromRequest, createUserClient } from "@/lib/supabase-server";
 import { generateAuditId, runAnalysis, validateTargetUrl } from "@/lib/vibecheck";
 import { sendScanCompleted, sendCriticalVuln } from "@/lib/email";
 
@@ -10,8 +10,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const token = getTokenFromRequest(req);
   const user = await getAuthUser(req);
-  if (!user) {
+  if (!user || !token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -20,9 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "Missing project id" });
   }
 
-  const db = createAdminClient();
+  const db = createUserClient(token);
 
-  // Verify ownership before doing anything else
   const { data: project, error: projectError } = await db
     .from("projects")
     .select("id, user_id, repository_url")
@@ -38,11 +38,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(404).json({ error: "Project not found" });
   }
 
-  if (project.user_id !== user.id) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-
-  // Allow caller to override the scan URL; fall back to the project's repository URL
   const rawUrl =
     (req.body as { targetUrl?: unknown })?.targetUrl ?? project.repository_url;
 
@@ -52,7 +47,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const targetUrl = (rawUrl as string).trim();
 
-  // Rate-limit: max 5 concurrent pending/running scans per user
   const { count } = await db
     .from("scans")
     .select("id", { count: "exact", head: true })
@@ -90,10 +84,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const scanId = scan.id;
 
-  // Respond immediately — client polls /api/scans/status?scanId=<id>
   res.status(202).json({ scanId, auditId, projectId: project.id });
 
-  // ─── background analysis ──────────────────────────────────────────────────
   const hardDeadline = setTimeout(async () => {
     await db
       .from("scans")
@@ -105,10 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq("id", scanId);
   }, ANALYSIS_TIMEOUT_MS);
 
-  await db
-    .from("scans")
-    .update({ status: "running" })
-    .eq("id", scanId);
+  await db.from("scans").update({ status: "running" }).eq("id", scanId);
 
   try {
     await sleep(5000 + Math.random() * 6000);
@@ -130,16 +119,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       .eq("id", scanId);
 
-    // Transactional emails — fire-and-forget
     const userEmail = user.email;
     if (userEmail) {
       const { data: scanRow } = await db.from("scans").select("audit_id").eq("id", scanId).single();
-      const auditId = scanRow?.audit_id ?? scanId;
+      const resolvedAuditId = scanRow?.audit_id ?? scanId;
 
       sendScanCompleted({
         userEmail,
         targetUrl,
-        auditId,
+        auditId: resolvedAuditId,
         criticalCount: critical_count,
         warningCount: warning_count,
         passedCount: passed_count,
@@ -156,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sendCriticalVuln({
           userEmail,
           targetUrl,
-          auditId,
+          auditId: resolvedAuditId,
           criticalCount: critical_count,
           topFindings,
           projectId: project.id,

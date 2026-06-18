@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getAuthUser, createAdminClient } from "@/lib/supabase-server";
+import { getAuthUser, getTokenFromRequest, createUserClient } from "@/lib/supabase-server";
 
 const VALID_PLATFORMS = ["github", "lovable", "replit", "bolt", "cursor", "v0", "other"] as const;
 type Platform = (typeof VALID_PLATFORMS)[number];
@@ -43,8 +43,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const token = getTokenFromRequest(req);
   const user = await getAuthUser(req);
-  if (!user) {
+  if (!user || !token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -54,9 +55,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: validationError });
   }
 
-  const db = createAdminClient();
+  const db = createUserClient(token);
 
-  // Guard: max 50 projects per user
   const { count } = await db
     .from("projects")
     .select("id", { count: "exact", head: true })

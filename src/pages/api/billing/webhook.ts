@@ -16,6 +16,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: "Webhook secret not configured" });
   }
 
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("SUPABASE_SERVICE_ROLE_KEY not configured — billing webhook disabled");
+    return res.status(500).json({ error: "Billing webhook not configured" });
+  }
+
   const sig = req.headers["stripe-signature"];
   let event: Stripe.Event;
 
