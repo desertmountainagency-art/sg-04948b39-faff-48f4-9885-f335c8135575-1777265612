@@ -8,6 +8,7 @@ import { ReportDashboard } from "@/components/ReportDashboard";
 import { FindingsList } from "@/components/FindingsList";
 import { Settings } from "@/components/Settings";
 import { useSubscription, FREE_SCAN_LIMIT } from "@/hooks/use-subscription";
+import type { ScanRecord } from "@/lib/vibecheck";
 
 type AppScreen = "home" | "scanning" | "report" | "findings";
 
@@ -15,12 +16,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"scan" | "reports" | "settings">("scan");
   const [currentScreen, setCurrentScreen] = useState<AppScreen>("home");
   const [scanUrl, setScanUrl] = useState("");
+  const [currentScan, setCurrentScan] = useState<ScanRecord | null>(null);
   const subscription = useSubscription();
 
   const handleTabChange = (tab: "scan" | "reports" | "settings") => {
     setActiveTab(tab);
     if (tab === "scan") setCurrentScreen("home");
-    else if (tab === "reports") setCurrentScreen("report");
+    else if (tab === "reports") setCurrentScreen(currentScan ? "report" : "home");
   };
 
   const handleStartScan = async () => {
@@ -29,7 +31,8 @@ export default function App() {
     setCurrentScreen("scanning");
   };
 
-  const handleScanComplete = () => {
+  const handleScanComplete = (scan: ScanRecord) => {
+    setCurrentScan(scan);
     setCurrentScreen("report");
     setActiveTab("reports");
   };
@@ -47,18 +50,15 @@ export default function App() {
             </p>
           </div>
 
-          {/* Scan limit gate */}
           <div className="bg-surface-1 border-2 border-accent-cyan/30 rounded-xl p-6 space-y-5 text-center">
             <div className="w-14 h-14 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 flex items-center justify-center mx-auto">
               <Lock className="w-7 h-7 text-accent-cyan" strokeWidth={2} />
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-bold text-foreground">
-                Free plan limit reached
-              </p>
+              <p className="text-sm font-bold text-foreground">Free plan limit reached</p>
               <p className="text-xs text-text-muted leading-relaxed">
-                You&apos;ve used all {FREE_SCAN_LIMIT} free scans this month.
-                Upgrade to Pro for unlimited scans and advanced AI analysis.
+                You&apos;ve used all {FREE_SCAN_LIMIT} free scans this month. Upgrade to Pro for
+                unlimited scans and advanced AI analysis.
               </p>
             </div>
             <div className="space-y-3">
@@ -101,10 +101,11 @@ export default function App() {
 
         <div className="space-y-3">
           <input
-            type="text"
-            placeholder="Repository or live URL..."
+            type="url"
+            placeholder="https://github.com/you/repo or https://yoursite.com"
             value={scanUrl}
             onChange={(e) => setScanUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleStartScan()}
             className="w-full px-4 py-3 bg-surface-1 border border-border rounded-lg text-sm text-foreground placeholder:text-text-dim focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:border-accent-cyan transition-all"
           />
           <button
@@ -116,7 +117,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Plan status pill */}
+        {/* Plan status */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-surface-1 border border-border-subtle rounded-lg">
           {subscription.isPro ? (
             <>
@@ -131,7 +132,8 @@ export default function App() {
           ) : (
             <>
               <span className="text-xs text-text-muted">
-                <span className="font-bold text-foreground">{subscription.scansRemaining}</span> of {FREE_SCAN_LIMIT} free scans remaining
+                <span className="font-bold text-foreground">{subscription.scansRemaining}</span> of{" "}
+                {FREE_SCAN_LIMIT} free scans remaining
               </span>
               <Link
                 href="/#pricing"
@@ -163,19 +165,27 @@ export default function App() {
   };
 
   const renderScreen = () => {
-    if (activeTab === "scan" && currentScreen === "home") {
-      return renderScanHome();
-    }
+    if (activeTab === "scan" && currentScreen === "home") return renderScanHome();
 
     if (currentScreen === "scanning") {
-      return <ScanProgress targetUrl={scanUrl} onComplete={handleScanComplete} />;
+      return (
+        <ScanProgress
+          targetUrl={scanUrl}
+          onComplete={handleScanComplete}
+        />
+      );
     }
 
-    if (activeTab === "reports" && currentScreen === "report") {
-      return <ReportDashboard auditId="VC-9921-X" onViewFindings={() => setCurrentScreen("findings")} />;
+    if (currentScreen === "report" && currentScan) {
+      return (
+        <ReportDashboard
+          scan={currentScan}
+          onViewFindings={() => setCurrentScreen("findings")}
+        />
+      );
     }
 
-    if (currentScreen === "findings") {
+    if (currentScreen === "findings" && currentScan) {
       return (
         <div className="space-y-4">
           <button
@@ -184,7 +194,7 @@ export default function App() {
           >
             ← Back to Report
           </button>
-          <FindingsList />
+          <FindingsList findings={currentScan.findings} />
         </div>
       );
     }
@@ -198,9 +208,7 @@ export default function App() {
       );
     }
 
-    if (activeTab === "settings") {
-      return <Settings />;
-    }
+    if (activeTab === "settings") return <Settings />;
 
     return null;
   };
@@ -213,9 +221,7 @@ export default function App() {
       />
 
       <div className="min-h-screen bg-background pb-16">
-        <main className="container py-8">
-          {renderScreen()}
-        </main>
+        <main className="container py-8">{renderScreen()}</main>
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
     </>
